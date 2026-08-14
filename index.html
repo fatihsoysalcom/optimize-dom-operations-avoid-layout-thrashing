@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Layout Thrashing Demo</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #container {
+            width: 90%;
+            display: flex;
+            flex-wrap: wrap;
+            border: 1px solid #ccc;
+            padding: 10px;
+            min-height: 200px;
+            position: relative;
+        }
+        .box {
+            width: 20px;
+            height: 20px;
+            background-color: #4CAF50;
+            margin: 2px;
+            position: relative; /* Essential for 'left' property to work */
+            transition: background-color 0.3s ease; /* For visual feedback */
+        }
+        .box.active {
+            background-color: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <h1>Web Performance: Layout Thrashing Demo</h1>
+    <p>This example demonstrates the performance difference when updating many DOM elements, comparing an inefficient method that causes layout thrashing with an optimized method that batches DOM reads and writes.</p>
+    <div class="controls">
+        <button onclick="runBadPerformance()">Run Bad Performance (Thrashing)</button>
+        <button onclick="runGoodPerformance()">Run Good Performance (Optimized)</button>
+        <button onclick="resetBoxes()">Reset</button>
+    </div>
+    <div id="container"></div>
+
+    <script>
+        const NUM_BOXES = 500; // Increase for more noticeable difference
+        const container = document.getElementById('container');
+        let boxes = [];
+
+        // Initialize boxes in a grid layout
+        function initBoxes() {
+            container.innerHTML = ''; // Clear existing boxes
+            boxes = [];
+            for (let i = 0; i < NUM_BOXES; i++) {
+                const box = document.createElement('div');
+                box.classList.add('box');
+                // Set initial positions using 'left' and 'top' for demonstration
+                box.style.left = (i % 25) * 24 + 'px'; 
+                box.style.top = Math.floor(i / 25) * 24 + 'px';
+                container.appendChild(box);
+                boxes.push(box);
+            }
+        }
+
+        // Reset boxes to initial state
+        function resetBoxes() {
+            boxes.forEach(box => {
+                box.classList.remove('active');
+                // Resetting 'left' and 'top' to original calculated values
+                // For simplicity, we re-initialize to ensure consistent starting state
+            });
+            initBoxes(); 
+            console.clear();
+            console.log('Boxes reset.');
+        }
+
+        // --- Bad Performance: Layout Thrashing ---
+        function runBadPerformance() {
+            resetBoxes(); // Ensure a fresh start for fair comparison
+            const startTime = performance.now();
+
+            // This loop causes layout thrashing:
+            // Each iteration intersperses a READ of a layout property (offsetLeft)
+            // with a WRITE of a layout property (style.left).
+            // The browser is forced to perform a synchronous layout calculation in each step
+            // to provide the correct 'offsetLeft' value, leading to poor performance.
+            boxes.forEach(box => {
+                const currentLeft = box.offsetLeft; // READ: Forces browser to calculate layout
+                box.style.left = (currentLeft + 5) + 'px'; // WRITE: Invalidates layout, potentially triggering another sync calculation on next read
+                box.classList.add('active'); // Visual feedback, not performance critical here
+            });
+
+            const endTime = performance.now();
+            console.log(`Bad Performance (Thrashing) took: ${(endTime - startTime).toFixed(2)} ms`);
+        }
+
+        // --- Good Performance: Batched DOM Operations ---
+        function runGoodPerformance() {
+            resetBoxes(); // Ensure a fresh start for fair comparison
+            const startTime = performance.now();
+
+            const newLeftPositions = [];
+
+            // Phase 1: READ all layout properties first
+            // The browser can optimize these reads without forcing intermediate layouts.
+            boxes.forEach(box => {
+                newLeftPositions.push(box.offsetLeft + 5); // READ: Collect all necessary data
+            });
+
+            // Phase 2: WRITE all layout properties afterwards
+            // The browser can apply all these writes and then perform a single layout calculation,
+            // significantly reducing reflows and improving performance.
+            boxes.forEach((box, index) => {
+                box.style.left = newLeftPositions[index] + 'px'; // WRITE: Apply all changes
+                box.classList.add('active'); // Visual feedback, not performance critical here
+            });
+
+            const endTime = performance.now();
+            console.log(`Good Performance (Optimized) took: ${(endTime - startTime).toFixed(2)} ms`);
+        }
+
+        // Initial setup on page load
+        document.addEventListener('DOMContentLoaded', initBoxes);
+    </script>
+</body>
+</html>
